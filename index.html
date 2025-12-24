@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>联机打牌 Demo（找朋友）</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <h2>联机打牌 - 找朋友（5-6人 / 2副牌 / 叫分 / 扣底 / 累计积分）</h2>
+
+  <div class="row">
+    <input id="name" placeholder="你的名字（可更改）" value="" />
+    <button id="btnCreate">创建房间</button>
+
+    <input id="roomId" placeholder="房间号（6位）" />
+    <button id="btnJoin">加入房间</button>
+
+    <button id="btnReady">准备/取消</button>
+    <button id="btnStart">房主开始</button>
+
+    <span class="btnSep"></span>
+
+    <button id="btnBid">叫分</button>
+    <button id="btnTrump">定主</button>
+    <button id="btnFriends">找朋友</button>
+    <button id="btnDiscard">确认扣底</button>
+
+    <span class="btnSep"></span>
+
+    <button id="btnRules" class="btnRules">📖 游戏规则</button>
+  </div>
+
+  <h3>牌桌</h3>
+
+  <!-- ✅ 顶部横栏公告栏（移到桌子外面） -->
+  <div id="topBar" class="topBar">
+    <div class="topBarItem">
+      <span class="topBarLabel">阶段</span>
+      <span id="topPhase" class="topBarValue">-</span>
+    </div>
+    <div class="topBarItem">
+      <span class="topBarLabel">叫分</span>
+      <span id="topBid" class="topBarValue">-</span>
+    </div>
+    <div class="topBarItem">
+      <span class="topBarLabel">主牌</span>
+      <span id="topTrump" class="topBarValue">-</span>
+    </div>
+    <div class="topBarItem">
+      <span class="topBarLabel">朋友声明</span>
+      <span id="topFriends" class="topBarValue">-</span>
+    </div>
+    <div class="topBarItem">
+      <span class="topBarLabel">底牌</span>
+      <span id="topBottom" class="topBarValue">-</span>
+    </div>
+  </div>
+
+  <div id="tableWrap">
+    <!-- ✅ 左侧积分榜 -->
+    <div id="scoreBoard" class="scoreBoard"></div>
+
+    <div id="tableCore">
+      <!-- ✅ 显示本轮第一张牌的花色 -->
+      <div id="leadSuitIndicator" class="leadSuitIndicator" style="display:none;"></div>
+
+      <div id="tablePlayers"></div>
+      <div id="playSlots"></div>
+
+      <!-- ✅ 中心圆盘：去掉主牌显示 -->
+      <div id="centerDial" class="centerDial">
+        <div id="centerArrow" class="centerArrow"></div>
+        <div id="phaseText" class="phaseText">等待准备</div>
+        <div class="subText">
+          操作：<span id="actorText">-</span>
+        </div>
+      </div>
+
+      <!-- 右下角：底牌框（6背面/可翻面） -->
+      <div id="bottomBox" class="bottomBox">
+        <div class="bottomHeader">
+          <span>底牌（6）</span>
+          <span id="bottomState" class="bottomState"></span>
+        </div>
+        <div id="bottomCards" class="bottomCards"></div>
+        <div class="bottomHint">发牌后背面朝上；扣底后背面；最终翻面统计</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>我的手牌（出牌阶段：点一张出一张；扣底阶段：先选牌再确认）</h3>
+  <div id="hand" class="handArea"></div>
+
+  <h3>公共状态（调试用）</h3>
+  <pre id="public"></pre>
+
+  <h3>日志</h3>
+  <pre id="log"></pre>
+
+  <!-- ✅ 模态对话框（替代 prompt） -->
+  <div id="modal" class="modal">
+    <div class="modalContent">
+      <h3 id="modalTitle">输入</h3>
+      <input id="modalInput" type="text" placeholder="请输入..." />
+      <div class="modalButtons">
+        <button id="modalConfirm" class="btnPrimary">确认</button>
+        <button id="modalCancel" class="btnSecondary">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ 朋友确认界面（游戏结束时） -->
+  <div id="friendConfirmModal" class="modal">
+    <div class="modalContent" style="min-width: 500px;">
+      <h3>游戏结束！请确认朋友身份</h3>
+      <div class="friendInfo">
+        <p><strong>你的声明：</strong><span id="friendDeclText">-</span></p>
+        <p class="hint">可自由选择 0-5 人（支持1打5战术）</p>
+      </div>
+      <div id="playerCheckboxes" class="checkboxList"></div>
+      <div class="modalButtons">
+        <button id="btnConfirmFriends" class="btnPrimary">确认并结算</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ 游戏结算弹窗 -->
+  <div id="gameOverModal" class="modal">
+    <div class="modalContent settlementContent">
+      <div class="settlementHeader">
+        <h3>🎮 本局结算</h3>
+      </div>
+      <div class="settlementBody">
+        <!-- 游戏基本信息 -->
+        <div class="settlementSection">
+          <div class="settlementInfo">
+            <div class="infoItem">
+              <span class="infoLabel">叫分</span>
+              <span id="settleBid" class="infoValue">-</span>
+            </div>
+            <div class="infoItem">
+              <span class="infoLabel">主牌</span>
+              <span id="settleTrump" class="infoValue">-</span>
+            </div>
+            <div class="infoItem">
+              <span class="infoLabel">底牌分数</span>
+              <span id="settleBottomPoints" class="infoValue">-</span>
+            </div>
+            <div class="infoItem">
+              <span class="infoLabel">底牌倍数</span>
+              <span id="settleBottomMultiplier" class="infoValue">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 结果 -->
+        <div class="settlementSection">
+          <div id="settleResult" class="settlementResult">-</div>
+        </div>
+
+        <!-- 队伍得分 -->
+        <div class="settlementSection">
+          <h4>队伍得分</h4>
+          <div class="teamScores">
+            <div class="teamScore bankerTeam">
+              <div class="teamLabel">庄家方</div>
+              <div id="bankerTeamScore" class="teamValue">-</div>
+              <div id="bankerMembers" class="teamMembers">-</div>
+            </div>
+            <div class="teamScore farmerTeam">
+              <div class="teamLabel">农民方</div>
+              <div id="farmerTeamScore" class="teamValue">-</div>
+              <div id="farmerMembers" class="teamMembers">-</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 个人得分 -->
+        <div class="settlementSection">
+          <h4>个人得分</h4>
+          <div id="playerScoresList" class="playerScoresList"></div>
+        </div>
+
+        <!-- 最后一墩信息 -->
+        <div class="settlementSection">
+          <div class="lastTrickInfo">
+            <span>最后一墩赢家：</span>
+            <span id="lastTrickWinner" class="highlight">-</span>
+          </div>
+        </div>
+      </div>
+      <div class="settlementFooter">
+        <button id="btnCloseGameOver" class="btnPrimary">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ 游戏规则弹窗 -->
+  <div id="rulesModal" class="modal">
+    <div class="modalContent rulesContent">
+      <div class="rulesHeader">
+        <h3>📖 扑克牌《找朋友》玩法规则</h3>
+        <button id="btnCloseRules" class="btnCloseModal">×</button>
+      </div>
+      <div class="rulesBody">
+        <section>
+          <h4>1️⃣ 适用范围</h4>
+          <p>适用于5-6人，<strong>6人最佳</strong>。两副扑克共108张，以花色分类，依次出牌。</p>
+          <p>• 5人局：留底牌8张，<strong>2人打3人</strong></p>
+          <p>• 6人局：留底6张，<strong>3人打3人</strong></p>
+        </section>
+
+        <section>
+          <h4>2️⃣ 积分规则</h4>
+          <p><strong>5等于5分；10或K等于10分。</strong>两副牌共200分。</p>
+        </section>
+
+        <section>
+          <h4>3️⃣ 流程（以六人局为例）</h4>
+          <p>当手牌发完余6张底，从第一个人开始<strong>叫分</strong>，<strong>120分起叫</strong>。叫多少分自己和朋友就必须拿多少分。</p>
+          <p>当有一个人喊出全场最高分，则由他坐庄<strong>定主牌</strong>，并且在"找朋友"后<strong>摸底并扣下底</strong>。</p>
+        </section>
+
+        <section>
+          <h4>4️⃣ 主牌</h4>
+          <p><strong>大小鬼共4张，以及8张2作为常用主牌</strong>（无论主牌是何花色）。</p>
+          <p>庄家会指定某一花色为主牌；其中<strong>与主牌花色相同的2比其余的2要大半级</strong>。</p>
+        </section>
+
+        <section>
+          <h4>5️⃣ 找朋友核心玩法</h4>
+          <p>庄家根据手中牌型需寻求两位朋友帮助。</p>
+          <p>庄家可以叫出任何一张：</p>
+          <ul>
+            <li>场上庄家已知的<strong>独一无二的牌</strong></li>
+            <li>任意一张以顺时针/逆时针<strong>存在于玩家手中的牌</strong></li>
+            <li>甚至任意一张<strong>先出现于场面上的牌</strong></li>
+          </ul>
+          <p>持有庄家所呼唤"特殊牌"之人，即为庄家的朋友。</p>
+          <p class="hint">💡 PS：定主牌与找朋友发生在摸底之前，因此可能出现庄家的"朋友牌"全在底中，庄家摸上来后变成<strong>1打5</strong>的情况。</p>
+        </section>
+
+        <section>
+          <h4>6️⃣ 进程</h4>
+          <p>游戏开始后以<strong>轮制出牌</strong>，一轮后牌面最大者收获该轮所有积分。</p>
+          <p>出牌时，根据第一家所出的花色来确定本轮的花色，后面5人必须皆出相同花色。若无相同花色，则：</p>
+          <ul>
+            <li><strong>情况一：用非主牌进行垫牌。</strong>垫牌者无主导权利，不可参与争夺积分。</li>
+            <li><strong>情况二：用主牌进行杀牌。</strong>杀牌要论大小，杀牌最大者收获这一轮的所有积分。</li>
+          </ul>
+          <p>若第一家出主牌，后续也同理：必须出主牌。注意<strong>大小四王以及2也是主牌的一员，不可留着不出</strong>。</p>
+        </section>
+
+        <section>
+          <h4>7️⃣ 特殊牌型</h4>
+          <p><strong>（1）对子：</strong>若手中存在一对一模一样的牌（例如两张黑桃A，编号分别为1和2），可一起打出。</p>
+
+          <div class="ruleSubsection">
+            <p><strong>📌 对子的定义：</strong></p>
+            <ul>
+              <li>必须是<strong>完全相同</strong>的两张牌：同花色、同点数、不同副本号</li>
+              <li>✅ 例如：黑桃A-1 + 黑桃A-2 = 对子</li>
+              <li>✅ 例如：大王-1 + 大王-2 = 对子（两张大王）</li>
+              <li>✅ 例如：小王-1 + 小王-2 = 对子（两张小王）</li>
+              <li>❌ 反例：大王 + 小王 ≠ 对子（点数不同）</li>
+              <li>❌ 反例：红桃2 + 黑桃2 ≠ 对子（花色不同）</li>
+            </ul>
+          </div>
+
+          <div class="ruleSubsection">
+            <p><strong>📌 跟对子规则（严格优先级）：</strong></p>
+            <ol>
+              <li><strong>有同花色对子</strong> → <span class="redText">必须出对子</span>（不能出单牌凑数）</li>
+              <li><strong>没有同花色对子，但有同花色单牌</strong> → 出两张同花色牌凑数</li>
+              <li><strong>完全没有该花色</strong> → 可以垫牌或杀牌</li>
+            </ol>
+            <p class="hint">💡 例：A出一对黑桃K，B有一对黑桃3和黑桃5、黑桃7两张单牌，B<strong>必须</strong>出那对黑桃3，不能出黑桃5+黑桃7。</p>
+          </div>
+
+          <div class="ruleSubsection">
+            <p><strong>📌 杀牌规则：</strong></p>
+            <ul>
+              <li><strong>前提条件：</strong>完全没有领头花色时，才能选择杀牌</li>
+              <li><strong>杀牌要求：</strong>必须用<strong>主牌对子</strong>（两张完全相同的主牌）</li>
+              <li>✅ 例如：一对黑桃5（主牌是黑桃）</li>
+              <li>✅ 例如：一对红桃2（2是主牌）</li>
+              <li>❌ 反例：黑桃5 + 黑桃7（都是主牌，但不是对子，只能算垫牌）</li>
+            </ul>
+          </div>
+
+          <div class="ruleSubsection">
+            <p><strong>📌 垫牌规则：</strong></p>
+            <ul>
+              <li>没有领头花色且不想/不能杀牌时，可以垫牌</li>
+              <li>垫牌可以用<strong>任意两张牌</strong>（主牌、非主牌都可以，不要求是对子）</li>
+              <li>垫牌者<strong>无法参与争夺</strong>，不能赢得本轮</li>
+            </ul>
+          </div>
+
+          <p><strong>（2）其余特殊牌型：</strong>将在熟练操作后解锁。</p>
+        </section>
+
+        <section>
+          <h4>8️⃣ 结束时</h4>
+          <p>由<strong>最后一轮最大者收取最后一轮的所有积分</strong>，且包括底牌中的积分。</p>
+          <p class="important">⚠️ 注意：底牌中的积分要<strong>乘2</strong>，这个行为叫做"<strong>扣底</strong>"。若使用对子扣底，则底中积分将要<strong>乘4</strong>。</p>
+        </section>
+
+        <section>
+          <h4>9️⃣ 记分规则</h4>
+          <p>以庄家先前声明的分数为准，判断庄家及其朋友是否完成。</p>
+          <ul>
+            <li><strong>若完成：</strong>视为庄家过关——庄家及其朋友<strong>加上</strong>所声明的分数；其余人加上所获取的分数。</li>
+            <li><strong>若未完成：</strong>视为失败——庄家及其朋友<strong>扣去</strong>所声明的分数；其余人加上他们所获取的分数。</li>
+          </ul>
+        </section>
+
+        <section>
+          <h4>🔟 牌局结束条件</h4>
+          <p><strong>最终负分或正分超1000分者为胜者</strong>，由最低分数者进行惩罚。</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ 历史出牌弹窗 -->
+  <div id="historyModal" class="modal">
+    <div class="modalContent historyContent">
+      <div class="historyHeader">
+        <h3 id="historyModalTitle">历史出牌</h3>
+        <button id="btnCloseHistory" class="btnCloseModal">×</button>
+      </div>
+      <div id="historyModalContent" class="historyCardsList"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="./client.js"></script>
+</body>
+</html>
